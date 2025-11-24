@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
-  <Id>6eb21d6e-1f42-495d-8834-08117af88bc6</Id>
+  <Id>eec896a5-0c68-4f28-9941-dd64c14fe396</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>Contoso</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Rex-cp"/>
+  <DisplayName DefaultValue="rex-addin"/>
   <Description DefaultValue="A template to get started."/>
   <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-64.png"/>
@@ -29,43 +29,31 @@
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
           <FunctionFile resid="Commands.Url"/>
-          <ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <OfficeTab id="TabHome">
-              <Group id="CommandsGroup">
-                <Label resid="CommandsGroup.Label"/>
-                <Icon>
-                  <bt:Image size="16" resid="Icon.16x16"/>
-                  <bt:Image size="32" resid="Icon.32x32"/>
-                  <bt:Image size="80" resid="Icon.80x80"/>
-                </Icon>
-                <Control xsi:type="Button" id="TaskpaneButton">
-                  <Label resid="TaskpaneButton.Label"/>
-                  <Supertip>
-                    <Title resid="TaskpaneButton.Label"/>
-                    <Description resid="TaskpaneButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16x16"/>
-                    <bt:Image size="32" resid="Icon.32x32"/>
-                    <bt:Image size="80" resid="Icon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>ButtonId1</TaskpaneId>
-                    <SourceLocation resid="Taskpane.Url"/>
-                  </Action>
-                </Control>
-              </Group>
-              <Group id="Snapshot.Group" label="Snapshot Tools">
-                <Control xsi:type="Button"
-                        id="Snapshot.Button"
-                        label="Snapshot Values Only"
-                        icon="assets/icon-32.png"
-                        size="Large"
-                        onAction="commands.snapshotAction"
-                        superTip="Create a duplicate workbook with formulas removed." />
-              </Group>
-            </OfficeTab>
-          </ExtensionPoint>
+         <ExtensionPoint xsi:type="PrimaryCommandSurface">
+  <CustomTab id="MyCustomTab">
+    <Label resid="groupLabel"/>
+    <Group id="MyGroup">
+      <Label resid="groupLabel"/>
+      <Control xsi:type="Button" id="btnCloneValues">
+        <Label resid="buttonLabel"/>
+        <Supertip>
+          <Title resid="buttonLabel"/>
+          <Description resid="buttonDesc"/>
+        </Supertip>
+        <Icon>
+          <bt:Image size="16" resid="Icon.16x16"/>
+          <bt:Image size="32" resid="Icon.32x32"/>
+          <bt:Image size="80" resid="Icon.80x80"/>
+        </Icon>
+        <Action xsi:type="ExecuteFunction">
+          <FunctionName>cloneSheetValues</FunctionName>
+        </Action>
+      </Control>
+    </Group>
+  </CustomTab>
+</ExtensionPoint>
+
+
         </DesktopFormFactor>
       </Host>
     </Hosts>
@@ -84,10 +72,18 @@
         <bt:String id="GetStarted.Title" DefaultValue="Get started with your sample add-in!"/>
         <bt:String id="CommandsGroup.Label" DefaultValue="Commands Group"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="Show Task Pane"/>
+        <bt:String id="groupLabel" DefaultValue="Clone Sheet"/>
+<bt:String id="buttonLabel" DefaultValue="Clone Values"/>
+<bt:String id="buttonDesc" DefaultValue="Clones the active worksheet values only"/>
+
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your sample add-in loaded successfully. Go to the HOME tab and click the 'Show Task Pane' button to get started."/>
         <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to Show a Taskpane"/>
+        <bt:String id="groupLabel" DefaultValue="Clone Sheet"/>
+<bt:String id="buttonLabel" DefaultValue="Clone Values"/>
+<bt:String id="buttonDesc" DefaultValue="Clones the active worksheet values only"/>
+
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
