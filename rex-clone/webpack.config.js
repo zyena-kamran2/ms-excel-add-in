@@ -73,6 +73,10 @@ module.exports = async (env, options) => {
               }
             },
           },
+          {
+            from: "src/commands/debug.html",  // <-- add this
+            to: "debug.html",
+          },
         ],
       }),
       new HtmlWebpackPlugin({
@@ -80,7 +84,14 @@ module.exports = async (env, options) => {
         template: "./src/commands/commands.html",
         chunks: ["polyfill", "commands"],
       }),
+      new HtmlWebpackPlugin({
+        filename: "debug.html",
+        template: "./src/commands/debug.html",
+        chunks: [], // no JS bundle needed if just showing <pre>
+      }),
+
     ],
+
     devServer: {
       headers: {
         "Access-Control-Allow-Origin": "*",

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Debug Console</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    body { font-family: monospace; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h3>Debug Logs</h3>
+  <pre id="log"></pre>
+
+  <script>
+    Office.onReady(() => {
+      // Notify parent that dialog is ready
+      Office.context.ui.messageParent("ready");
+
+      // Listen for messages sent from the parent (commands.ts)
+      Office.context.ui.addHandlerAsync(
+        Office.EventType.DialogParentMessageReceived,
+        function (arg) {
+          const logEl = document.getElementById("log");
+          if ("message" in arg) {
+            logEl.textContent += arg.message + "\n";
+          }
+        }
+      );
+    });
+  </script>
+</body>
+</html>

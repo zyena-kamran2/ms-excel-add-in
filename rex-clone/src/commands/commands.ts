@@ -1,37 +1,52 @@
-/*
- * Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
- * See LICENSE in the project root for license information.
- */
-
 /* global Office */
 
 Office.onReady(() => {
-  // If needed, Office.js is ready to be called.
+  // Office.js is ready
 });
 
+let debugDialog: Office.Dialog | null = null;
+let dialogReady = false;
+const debugQueue: string[] = [];
+
 /**
- * Shows a notification when the add-in command is executed.
- * @param event
+ * Send debug messages to a separate debug.html dialog
  */
-function action(event: Office.AddinCommands.Event) {
-  const message: Office.NotificationMessageDetails = {
-    type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-    message: "Performed action.",
-    icon: "Icon.80x80",
-    persistent: true,
-  };
+function debugLog(message: string) {
+  if (!debugDialog) {
+    Office.context.ui.displayDialogAsync(
+      "https://localhost:3000/debug.html",
+      { height: 30, width: 40 },
+      (result) => {
+        debugDialog = result.value;
 
-  // Show a notification message.
-  Office.context.mailbox.item.notificationMessages.replaceAsync(
-    "ActionPerformanceNotification",
-    message
-  );
+        debugDialog.addEventHandler(
+          Office.EventType.DialogMessageReceived,
+          (arg) => {
+            if ("message" in arg && arg.message === "ready") {
+              dialogReady = true;
+              // Send any queued messages
+              debugQueue.forEach((msg) => debugDialog?.messageChild(msg));
+              debugQueue.length = 0;
+            }
+          }
+        );
+      }
+    );
+  }
 
-  // Be sure to indicate when the add-in command function is complete.
-  event.completed();
+  if (dialogReady) {
+    debugDialog?.messageChild(message);
+  } else {
+    debugQueue.push(message); // Queue messages until dialog is ready
+  }
+
+  console.log(message); // Fallback
 }
+
+
 /**
  * Clone the active worksheet, copying only the values (not formulas).
+ * <Cloning logic unchanged>
  */
 export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
   try {
@@ -39,7 +54,8 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
       const workbook = context.workbook;
       const sheet = workbook.worksheets.getActiveWorksheet();
 
-      // Load the used range (only values)
+      debugLog("Loading used range...");
+
       const usedRange = sheet.getUsedRange();
       usedRange.load(["values", "rowCount", "columnCount", "address"]);
       await context.sync();
@@ -47,53 +63,44 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
       const values = usedRange.values as (string | number | boolean)[][];
       const rowCount = usedRange.rowCount!;
       const colCount = usedRange.columnCount!;
-      console.log(`Used range ${usedRange.address}, rows: ${rowCount}, cols: ${colCount}`);
+      debugLog(`Used range ${usedRange.address}, rows: ${rowCount}, cols: ${colCount}`);
 
-      // Create a new worksheet
-      // Decide on a name (e.g., originalName + " - Copy")
       sheet.load("name");
       await context.sync();
       const originalName = sheet.name!;
       let newName = `${originalName} - Copy`;
-      // Make sure name is unique
+
       const sheets = workbook.worksheets;
       let suffix = 1;
+
       while (true) {
         try {
-          // Try to add with the name
-          const newSheet = sheets.add(newName);
-          // If no error, break
+          sheets.add(newName);
           break;
         } catch (e: any) {
-          // If name exists, change name and try again
           suffix++;
           newName = `${originalName} - Copy (${suffix})`;
         }
       }
+
       const newSheet = workbook.worksheets.getItem(newName);
 
-      // Write values into new sheet
-      // We'll write to A1 with same dimension of usedRange
+      debugLog(`Writing values to new sheet: ${newName}`);
       const targetRange = newSheet.getRangeByIndexes(0, 0, rowCount, colCount);
       targetRange.values = values;
 
-      // Optionally, copy formats (if you want) – uncomment:
+      // Optionally, copy formats:
       // targetRange.copyFrom(usedRange, Excel.RangeCopyType.formats);
 
       await context.sync();
+      debugLog(`Worksheet cloned successfully as "${newName}"`);
     });
-  } catch (error) {
-    console.error("Error cloning worksheet:", error);
-    // You might want to show a notification to the user
-    // Office.ui.displayDialogAsync; // or other UI method
-
+  } catch (error: any) {
+    debugLog(`Error cloning worksheet: ${error}`);
   } finally {
-    // Indicate that your command function is complete
     event.completed();
   }
 }
 
-// Register the function so Office can call it via the manifest
+// Register the function
 Office.actions.associate("cloneWorksheetValues", cloneWorksheetValues);
-// Register the function with Office.
-Office.actions.associate("action", action);
