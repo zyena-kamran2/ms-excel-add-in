@@ -41,7 +41,7 @@ function debugLog(message: string) {
 
 
 /**
- * Clone the active worksheet, strip external formulas in the copy, and optionally export as base64
+ * Clone the active worksheet, strip external formulas in the copy, and export only that sheet to a new workbook
  */
 
 export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
@@ -167,7 +167,37 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
     });
 
     //
-    // 2️⃣ NOW: Clone the entire workbook using Base64 (your exact logic)
+    // 2️⃣ NOW: Hide all sheets except the new one, export workbook, then restore visibility
+    //
+    debugLog("Preparing to export only the new sheet...");
+
+    // Store original visibility states
+    const sheetVisibility: { name: string; visibility: string }[] = [];
+
+    await Excel.run(async (context) => {
+      const workbook = context.workbook;
+      const sheets = workbook.worksheets;
+      sheets.load("items/name, items/visibility");
+      await context.sync();
+
+      // Save current visibility and hide all sheets except the new one
+      for (const sheet of sheets.items) {
+        sheetVisibility.push({
+          name: sheet.name,
+          visibility: sheet.visibility
+        });
+
+        if (sheet.name !== newName) {
+          sheet.visibility = Excel.SheetVisibility.hidden;
+        }
+      }
+
+      await context.sync();
+      debugLog(`Hidden ${sheetVisibility.length - 1} sheets, keeping only "${newName}" visible`);
+    });
+
+    //
+    // 3️⃣ Export the workbook (now containing only the visible new sheet)
     //
     debugLog("Starting workbook export to Base64...");
 
@@ -218,7 +248,7 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
                   await Excel.run(async (context) => {
                     Excel.createWorkbook(base64Data);
                     await context.sync();
-                    debugLog("New workbook created successfully!");
+                    debugLog("New workbook created successfully with only the cloned sheet!");
                     resolve();
                   });
                 } catch (error: any) {
@@ -236,9 +266,27 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
       );
     });
 
+    //
+    // 4️⃣ Restore original sheet visibility and delete the temp sheet
+    //
     await Excel.run(async (context) => {
       const workbook = context.workbook;
+      const sheets = workbook.worksheets;
 
+      // Restore original visibility
+      for (const sheetInfo of sheetVisibility) {
+        try {
+          const sheet = sheets.getItem(sheetInfo.name);
+          sheet.visibility = sheetInfo.visibility as any;
+        } catch (e) {
+          debugLog(`Could not restore visibility for ${sheetInfo.name}`);
+        }
+      }
+
+      await context.sync();
+      debugLog("Restored original sheet visibility");
+
+      // Delete the temp sheet
       try {
         const sheetToDelete = workbook.worksheets.getItem(newName);
         sheetToDelete.delete();
@@ -248,8 +296,6 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
         debugLog(`Sheet ${newName} not found for deletion`);
       }
     });
-
-
 
   } catch (error: any) {
     debugLog(`ERROR: ${error.message || error}`);
@@ -269,8 +315,6 @@ function arrayBufferToBase64(buffer: Uint8Array): string {
   }
   return btoa(binary);
 }
-
-
 
 // Register the function
 Office.actions.associate("cloneWorksheetValues", cloneWorksheetValues);
