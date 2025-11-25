@@ -48,6 +48,9 @@ function debugLog(message: string) {
  * Clone the active worksheet, copying only the values (not formulas).
  * <Cloning logic unchanged>
  */
+/**
+ * Clone the active worksheet, copying only the values (not formulas).
+ */
 export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
   try {
     await Excel.run(async (context) => {
@@ -57,22 +60,37 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
       debugLog("Loading used range...");
 
       const usedRange = sheet.getUsedRange();
-      usedRange.load(["values", "rowCount", "columnCount", "address"]);
+      usedRange.load([
+        "values",
+        "rowCount",
+        "columnCount",
+        "address",
+        "rowIndex",
+        "columnIndex"
+      ]);
       await context.sync();
 
       const values = usedRange.values as (string | number | boolean)[][];
       const rowCount = usedRange.rowCount!;
       const colCount = usedRange.columnCount!;
-      debugLog(`Used range ${usedRange.address}, rows: ${rowCount}, cols: ${colCount}`);
+      const startRow = usedRange.rowIndex!;
+      const startCol = usedRange.columnIndex!;
 
+      debugLog(
+        `Used range ${usedRange.address}, rows: ${rowCount}, cols: ${colCount}, startRow: ${startRow}, startCol: ${startCol}`
+      );
+
+      // Load original sheet name
       sheet.load("name");
       await context.sync();
+
       const originalName = sheet.name!;
       let newName = `${originalName} - Copy`;
 
       const sheets = workbook.worksheets;
       let suffix = 1;
 
+      // Generate unique sheet name
       while (true) {
         try {
           sheets.add(newName);
@@ -85,11 +103,20 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
 
       const newSheet = workbook.worksheets.getItem(newName);
 
-      debugLog(`Writing values to new sheet: ${newName}`);
-      const targetRange = newSheet.getRangeByIndexes(0, 0, rowCount, colCount);
+      debugLog(
+        `Writing values to new sheet: ${newName} at row ${startRow}, col ${startCol}`
+      );
+
+      // ⭐ FIX: Preserve same row & column position
+      const targetRange = newSheet.getRangeByIndexes(
+        startRow,
+        startCol,
+        rowCount,
+        colCount
+      );
       targetRange.values = values;
 
-      // Optionally, copy formats:
+      // Formats (optional)
       // targetRange.copyFrom(usedRange, Excel.RangeCopyType.formats);
 
       await context.sync();
@@ -101,6 +128,7 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
     event.completed();
   }
 }
+
 
 // Register the function
 Office.actions.associate("cloneWorksheetValues", cloneWorksheetValues);
