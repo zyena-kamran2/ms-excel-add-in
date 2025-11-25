@@ -48,137 +48,109 @@ Office.onReady(() => {
   // Office.js ready
 });
 
+// Fixed approach: Clone worksheet to new workbook using base64 export
+// Simplified approach: Clone worksheet by reading data and creating new workbook
+// Clone worksheet to new workbook - using window.open approach
 export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
   try {
-    await Excel.run(async (context) => {
-      const workbook = context.workbook;
-      const sheet = workbook.worksheets.getActiveWorksheet();
-
-      debugLog("Loading used range (values + formulas)...");
-
-      const usedRange = sheet.getUsedRange();
-      usedRange.load([
-        "values",
-        "formulas",
-        "rowCount",
-        "columnCount",
-        "address",
-        "rowIndex",
-        "columnIndex",
-      ]);
-      await context.sync();
-
-      const values = usedRange.values as any[][];
-      const formulas = usedRange.formulas as any[][];
-      const rowCount = usedRange.rowCount!;
-      const colCount = usedRange.columnCount!;
-      const startRow = usedRange.rowIndex!;
-      const startCol = usedRange.columnIndex!;
-
-      debugLog(
-        `Used range ${usedRange.address}, rows: ${rowCount}, cols: ${colCount}, startRow: ${startRow}, startCol: ${startCol}`
-      );
-
-      // Load original sheet name
-      sheet.load("name");
-      await context.sync();
-
-      const originalName = sheet.name!;
-      let newName = `${originalName} - Copy`;
-
-      const sheets = workbook.worksheets;
-      let suffix = 1;
-
-      // Generate unique sheet name
-      while (true) {
-        try {
-          sheets.add(newName);
-          break;
-        } catch (e: any) {
-          suffix++;
-          newName = `${originalName} - Copy (${suffix})`;
-        }
-      }
-
-      const newSheet = workbook.worksheets.getItem(newName);
-      debugLog(`Created ${newName}`);
-
-      // Target range starts at A1 (0,0) in new sheet
-      const targetRange = newSheet.getRangeByIndexes(0, 0, rowCount, colCount);
-
-      // 1️⃣ Copy formats safely
-      debugLog("Copying formats...");
-      targetRange.copyFrom(usedRange, Excel.RangeCopyType.formats);
-      await context.sync();
-
-      // 2️⃣ Copy values
-      debugLog("Writing values (values-only copy)...");
-      targetRange.values = values;
-      await context.sync();
-
-      // 3️⃣ Restore internal formulas selectively
-      debugLog("Restoring internal formulas...");
-
-      const externalPatterns: RegExp[] = [
-        /\[[^\]]+\]/, // external workbook reference
-        /\bWEBSERVICE\s*\(/i,
-        /\bFILTERXML\s*\(/i,
-        /\bRTD\s*\(/i,
-        /https?:\/\//i,
-        /::/i,
-      ];
-
-      function isFormulaString(cellFormula: any): boolean {
-        return typeof cellFormula === "string" && cellFormula.startsWith("=");
-      }
-
-      function isExternalFormula(formulaText: string): boolean {
-        if (!formulaText || typeof formulaText !== "string") return false;
-        return externalPatterns.some((re) => re.test(formulaText));
-      }
-
-      // Build boolean map of formulas to keep
-      const keepFormula: boolean[][] = [];
-      for (let r = 0; r < rowCount; r++) {
-        keepFormula[r] = [];
-        for (let c = 0; c < colCount; c++) {
-          const f = formulas?.[r]?.[c];
-          keepFormula[r][c] = isFormulaString(f) && !isExternalFormula(f);
-        }
-      }
-
-      // Apply formulas in contiguous blocks
-      for (let r = 0; r < rowCount; r++) {
-        let c = 0;
-        while (c < colCount) {
-          if (!keepFormula[r][c]) {
-            c++;
-            continue;
+    debugLog("Starting clone operation...");
+    
+    // Get the current workbook as a base64 string
+    await new Promise<void>((resolve, reject) => {
+      Office.context.document.getFileAsync(
+        Office.FileType.Compressed,
+        { sliceSize: 65536 },
+        async (result) => {
+          if (result.status !== Office.AsyncResultStatus.Succeeded) {
+            debugLog(`ERROR: Failed to get file - ${result.error.message}`);
+            reject(result.error);
+            return;
           }
-          let runStart = c;
-          let runEnd = c + 1;
-          while (runEnd < colCount && keepFormula[r][runEnd]) runEnd++;
-          const runLen = runEnd - runStart;
 
-          const subRange = newSheet.getRangeByIndexes(r, runStart, 1, runLen);
-          const formulasSlice: any[][] = [formulas[r].slice(runStart, runEnd)];
+          const file = result.value;
+          const sliceCount = file.sliceCount;
+          let slicesReceived = 0;
+          const fileContent: number[] = [];
 
-          subRange.formulas = formulasSlice;
-          c = runEnd;
+          debugLog(`File has ${sliceCount} slices to read`);
+
+          function readSlice(sliceIndex: number) {
+            file.getSliceAsync(sliceIndex, async (sliceResult) => {
+              if (sliceResult.status !== Office.AsyncResultStatus.Succeeded) {
+                debugLog(`ERROR: Failed to read slice ${sliceIndex}`);
+                file.closeAsync();
+                reject(sliceResult.error);
+                return;
+              }
+
+              // Add slice data to file content
+              const sliceData = sliceResult.value.data;
+              const byteArray = new Uint8Array(sliceData);
+              for (let i = 0; i < byteArray.length; i++) {
+                fileContent.push(byteArray[i]);
+              }
+
+              slicesReceived++;
+              debugLog(`Read slice ${slicesReceived}/${sliceCount}`);
+
+              if (slicesReceived === sliceCount) {
+                // All slices received - convert to base64 and create workbook
+                file.closeAsync();
+                
+                try {
+                  const uint8Array = new Uint8Array(fileContent);
+                  const base64Data = arrayBufferToBase64(uint8Array);
+                  
+                  debugLog("File conversion complete, creating new workbook...");
+                  
+                  await Excel.run(async (context) => {
+                    // Create new workbook with the base64 data
+                    Excel.createWorkbook(base64Data);
+                    await context.sync();
+                    debugLog("New workbook created successfully!");
+                    resolve();
+                  });
+                } catch (error: any) {
+                  debugLog(`ERROR during workbook creation: ${error.message}`);
+                  reject(error);
+                }
+              } else {
+                // Read next slice
+                readSlice(sliceIndex + 1);
+              }
+            });
+          }
+
+          // Start reading slices
+          readSlice(0);
         }
-      }
-
-      await context.sync();
-      debugLog(`Worksheet cloned successfully as "${newName}"`);
+      );
     });
+
   } catch (error: any) {
-    debugLog(`Error cloning worksheet with selective formulas: ${error}`);
+    debugLog(`ERROR: ${error.message || error}`);
+    if (error.debugInfo) {
+      debugLog(`Debug info: ${JSON.stringify(error.debugInfo)}`);
+    }
+    console.error(error);
   } finally {
     event.completed();
   }
 }
 
-
-
+// Helper function to convert ArrayBuffer to Base64
+function arrayBufferToBase64(buffer: Uint8Array): string {
+  let binary = '';
+  const len = buffer.byteLength;
+  
+  // Process in chunks to avoid stack overflow
+  const chunkSize = 8192;
+  for (let i = 0; i < len; i += chunkSize) {
+    const chunk = buffer.subarray(i, Math.min(i + chunkSize, len));
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  
+  return btoa(binary);
+}
 // Register the function
 Office.actions.associate("cloneWorksheetValues", cloneWorksheetValues);
