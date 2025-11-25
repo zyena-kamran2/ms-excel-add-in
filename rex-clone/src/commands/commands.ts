@@ -43,14 +43,6 @@ function debugLog(message: string) {
   console.log(message); // Fallback
 }
 
-
-/**
- * Clone the active worksheet, copying only the values (not formulas).
- * <Cloning logic unchanged>
- */
-/**
- * Clone the active worksheet, copying only the values (not formulas).
- */
 export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
   try {
     await Excel.run(async (context) => {
@@ -90,7 +82,6 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
       const sheets = workbook.worksheets;
       let suffix = 1;
 
-      // Generate unique sheet name
       while (true) {
         try {
           sheets.add(newName);
@@ -102,24 +93,25 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
       }
 
       const newSheet = workbook.worksheets.getItem(newName);
+      debugLog(`New sheet created: ${newName}`);
 
-      debugLog(
-        `Writing values to new sheet: ${newName} at row ${startRow}, col ${startCol}`
-      );
-
-      // ⭐ FIX: Preserve same row & column position
+      // Step 1: Format copy (safe)
       const targetRange = newSheet.getRangeByIndexes(
         startRow,
         startCol,
         rowCount,
         colCount
       );
-      targetRange.values = values;
 
-      // Formats (optional)
-      // targetRange.copyFrom(usedRange, Excel.RangeCopyType.formats);
-
+      targetRange.copyFrom(usedRange, Excel.RangeCopyType.formats);
       await context.sync();
+
+      debugLog("Copied formatting.");
+
+      // Step 2: Write values
+      targetRange.values = values;
+      await context.sync();
+
       debugLog(`Worksheet cloned successfully as "${newName}"`);
     });
   } catch (error: any) {
