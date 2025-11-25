@@ -49,6 +49,7 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
     //
     // 1️⃣ FIRST: Clone the worksheet
     //
+    let newName = "";
     await Excel.run(async (context) => {
       const workbook = context.workbook;
       const sheet = workbook.worksheets.getActiveWorksheet();
@@ -82,7 +83,7 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
       await context.sync();
 
       const originalName = sheet.name!;
-      let newName = `${originalName} - Copy`;
+      newName = `${originalName} - Copy`;
       const sheets = workbook.worksheets;
       let suffix = 1;
 
@@ -234,6 +235,21 @@ export async function cloneWorksheetValues(event: Office.AddinCommands.Event) {
         }
       );
     });
+
+    await Excel.run(async (context) => {
+      const workbook = context.workbook;
+
+      try {
+        const sheetToDelete = workbook.worksheets.getItem(newName);
+        sheetToDelete.delete();
+        await context.sync();
+        debugLog(`Deleted temp sheet: ${newName}`);
+      } catch (e) {
+        debugLog(`Sheet ${newName} not found for deletion`);
+      }
+    });
+
+
 
   } catch (error: any) {
     debugLog(`ERROR: ${error.message || error}`);
